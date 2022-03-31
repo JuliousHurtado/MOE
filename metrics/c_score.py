@@ -47,7 +47,8 @@ class CScoreMetric(PluginMetric[float]):
         else:
             assert False, "Dataset {} not found".format(name_dataset)
 
-        self.get_dataloader(train_dataset, val_dataset)
+        if self.top_percentaje > 0:
+            self.get_dataloader(train_dataset, val_dataset)
 
     def get_dataloader(self, train_dataset, val_dataset) -> None:
         total_labels = set(train_dataset.targets)
@@ -91,7 +92,7 @@ class CScoreMetric(PluginMetric[float]):
         pass
 
     def after_training_exp(self, strategy: 'PluggableStrategy') -> None:
-        print(self.acc_result_classes)
+        # print(self.acc_result_classes)
         self.acc_tasks.append(self.acc_epochs)
 
     def before_training_exp(self, strategy: 'PluggableStrategy') -> None:
@@ -107,12 +108,13 @@ class CScoreMetric(PluginMetric[float]):
         self.acc_epochs = []
 
     def after_training_epoch(self, strategy: 'PluggableStrategy'):
-        for t in self.task_to_classes.keys():
-            for c in self.task_to_classes[t]:
-                self.update_accuracy_class(strategy, c, 'train_lower')
-                self.update_accuracy_class(strategy, c, 'train_upper')
-                self.update_accuracy_class(strategy, c, 'val_lower')
-                self.update_accuracy_class(strategy, c, 'val_upper')
+        if self.top_percentaje > 0:
+            for t in self.task_to_classes.keys():
+                for c in self.task_to_classes[t]:
+                    self.update_accuracy_class(strategy, c, 'train_lower')
+                    self.update_accuracy_class(strategy, c, 'train_upper')
+                    self.update_accuracy_class(strategy, c, 'val_lower')
+                    self.update_accuracy_class(strategy, c, 'val_upper')
     
         self.acc_epochs.append(strategy.evaluator.metrics[0]._metric.result()['0'])
 
