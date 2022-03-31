@@ -26,13 +26,14 @@ class SimpleCNN(nn.Module):
         layer.add_module('relu3',nn.ReLU(inplace=True))
         if add_pooling:
             layer.add_module('pool3',nn.MaxPool2d(kernel_size=2, stride=1))
+        layer.add_module('flatten', nn.Flatten())
         self.features = layer
 
         self.classifier = nn.Sequential(nn.Linear(1152*N, num_classes))
 
     def forward(self, x):
         x = self.features(x)
-        x = x.view(x.size(0), -1)
+        # x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
 

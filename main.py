@@ -5,9 +5,8 @@ from torchvision import transforms
 from models.simpleCNN import SimpleCNN
 from metrics.c_score import CScoreMetric
 
-from avalanche.training.strategies import BaseStrategy
+from avalanche.training.strategies import Naive, GDumb, Replay, EWC, LwF, AGEM, ICaRL
 from avalanche.benchmarks.classic import SplitCIFAR10, SplitMNIST, SplitCIFAR100
-from avalanche.training.plugins import GDumbPlugin
 from avalanche.evaluation.metrics import forgetting_metrics, \
 accuracy_metrics, loss_metrics
 
@@ -21,8 +20,9 @@ def parse_train_args():
     parser = argparse.ArgumentParser("Positive Forgetting")
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--c_score_top_percentaje", type=float, default=0.2)
 
     parser.add_argument("--model", type=str, default='simplecnn')
     parser.add_argument("--n_simplecnn", type=int, default=1)
@@ -30,8 +30,30 @@ def parse_train_args():
     parser.add_argument("--dataset", type=str, default='cifar10')
     parser.add_argument("--n_experience", type=int, default=2)
 
+    parser.add_argument("--use_naive", action="store_true")
+
     parser.add_argument("--use_gdump", action="store_true")
     parser.add_argument("--gdump_memory", type=int, default=5000)
+
+    parser.add_argument("--use_replay", action="store_true")
+    parser.add_argument("--replay_memory", type=int, default=5000)
+
+    parser.add_argument("--use_ewc", action="store_true")
+    parser.add_argument("--ewc_lambda", type=float, default=1)
+    parser.add_argument("--ewc_mode", type=str, default="onlinesum") # separate onlinesum onlineweightedsum
+    parser.add_argument("--ewc_decay_factor", type=float, default=0.1)
+
+    parser.add_argument("--use_lwf", action="store_true")
+    parser.add_argument("--lwf_alpha", type=float, default=0.5)
+    parser.add_argument("--lwf_temperature", type=float, default=1)
+
+    parser.add_argument("--use_agem", action="store_true")
+    parser.add_argument("--agem_pattern_per_exp", type=int, default=1000)
+    parser.add_argument("--agem_sample_size", type=int, default=64)
+
+    parser.add_argument("--use_icarl", action="store_true")
+    parser.add_argument("--icarl_memory_size", type=int, default=5000)
+    parser.add_argument("--icarl_fixed_memory", action="store_false")
 
     args = parser.parse_args()
 
@@ -84,20 +106,84 @@ def get_model(args, num_classes):
     
     assert False, "Model {} not found".format(args.model)
 
-def get_plugins(args):
-    plugins = []
+def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'):
+
+    if args.use_naive:
+        return Naive(
+            model, optimizer, criterion, device = device,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "naive_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs)
 
     if args.use_gdump:
-        plugins.append(GDumbPlugin(mem_size=args.gdump_memory))
+        return GDumb(
+            model, optimizer, criterion, device = device,
+            mem_size = args.gdump_memory,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "gdump_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, args.gdump_memory)
 
-    return plugins
+    if args.use_replay:
+        return Replay(
+            model, optimizer, criterion, device = device,
+            mem_size = args.replay_memmory,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "reaply_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, args.replay_memmory)
+
+    if args.use_ewc:
+        return EWC(
+            model, optimizer, criterion, device = device,
+            ewc_lambda = args.ewc_lambda, mode = args.ewc_mode,
+            decay_factor = args.ewc_decay_factor,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "ewc_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, 
+                        args.ewc_lambda, args.ewc_mode , args.ewc_decay_factor)
+
+    if args.use_lwf:
+        return LwF(
+            model, optimizer, criterion, device = device,
+            alpha = args.lwf_alpha, temperature = args.lwf_temperature,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "lwf_{}_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, 
+                        args.lwf_alpha, args.lwf_temperature)
+
+    if args.use_agem:
+        return AGEM(
+            model, optimizer, criterion, device = device,
+            patterns_per_exp = args.agem_pattern_per_exp, 
+            sample_size = args.agem_sample_size,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "agem_{}_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, 
+                        args.agem_pattern_per_exp, args.agem_sample_size)
+
+    if args.use_icarl:
+        return ICaRL(
+            model.features, model.classifier, optimizer, device = device,
+            memory_size = args.icarl_memory_size,
+            fixed_memory = args.icarl_fixed_memory,
+            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
+            train_epochs = args.epochs,
+            evaluator = eval_plugin
+        ), "icarl_{}_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, 
+                        args.icarl_memory_size, args.icarl_fixed_memory)
+
+    assert False, "No Strategy selected"
 
 def main():
     args = parse_train_args()
 
     benchmark, num_classes, transform = get_dataset(args)
     model = get_model(args, num_classes)
-    plugins = get_plugins(args)
 
     optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
     criterion = CrossEntropyLoss()
@@ -112,13 +198,7 @@ def main():
         strict_checks=False
     )
 
-    cl_strategy = BaseStrategy(
-        model, optimizer, criterion, device='cuda',
-        train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
-        train_epochs = args.epochs,
-        plugins = plugins,
-        evaluator = eval_plugin
-    )
+    cl_strategy = get_strategy(args, model, optimizer, criterion, eval_plugin)
 
     print('Starting experiment...')
     results = []

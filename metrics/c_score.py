@@ -16,7 +16,8 @@ class CScoreMetric(PluginMetric[float]):
 
     def __init__(self, name_dataset, train_transform=None, val_transform=None,
                      root='../data', top_percentaje: float=0.2,
-                     save_in_file=True, path_save_file='./results'):
+                     save_in_file=True, path_save_file='./results',
+                     name_save_file='results_metric_c_score.pth'):
         """
         Initialize the metric
         """
@@ -26,8 +27,11 @@ class CScoreMetric(PluginMetric[float]):
         self.class_to_dataloader = defaultdict(dict)
         self.acc_result_classes = defaultdict(dict)
 
+        self.acc_tasks = []
+
         self.save_in_file = save_in_file
         self.path_save_file = path_save_file
+        self.name_file = name_save_file
 
         self.top_percentaje = top_percentaje
 
@@ -88,6 +92,7 @@ class CScoreMetric(PluginMetric[float]):
 
     def after_training_exp(self, strategy: 'PluggableStrategy') -> None:
         print(self.acc_result_classes)
+        self.acc_tasks.append(self.acc_epochs)
 
     def before_training_exp(self, strategy: 'PluggableStrategy') -> None:
         self.task_to_classes[strategy.experience.current_experience] = \
@@ -98,6 +103,8 @@ class CScoreMetric(PluginMetric[float]):
             self.acc_result_classes[c]['train_upper'] = []
             self.acc_result_classes[c]['val_lower'] = []
             self.acc_result_classes[c]['val_upper'] = []
+        
+        self.acc_epochs = []
 
     def after_training_epoch(self, strategy: 'PluggableStrategy'):
         for t in self.task_to_classes.keys():
@@ -107,11 +114,14 @@ class CScoreMetric(PluginMetric[float]):
                 self.update_accuracy_class(strategy, c, 'val_lower')
                 self.update_accuracy_class(strategy, c, 'val_upper')
     
+        self.acc_epochs.append(strategy.evaluator.metrics[0]._metric.result()['0'])
+
     def after_training(self, strategy: 'PluggableStrategy'):
         if self.save_in_file:
             torch.save({
                 'acc_per_class': self.acc_result_classes,
-                }, os.path.join(self.path_save_file,'result_metric_c_score.pth'))
+                'acc_task': self.acc_tasks,
+                }, os.path.join(self.path_save_file, self.name_file))
         
     def update_accuracy_class(self, strategy, c, group):
         dataloder = self.class_to_dataloader[c][group]
@@ -126,7 +136,7 @@ class CScoreMetric(PluginMetric[float]):
                 outputs = strategy.model(x)
 
                 _, preds = torch.max(outputs, 1)
-                running_vacc += (preds == target).sum()
+                running_vacc += (preds == target).sum().item()
                 total_items += len(target)
         
         self.acc_result_classes[c][group].append(running_vacc/total_items)
