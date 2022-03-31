@@ -16,8 +16,7 @@ class CScoreMetric(PluginMetric[float]):
 
     def __init__(self, name_dataset, train_transform=None, val_transform=None,
                      root='../data', top_percentaje: float=0.2,
-                     save_in_file=True, path_save_file='./results',
-                     name_save_file='results_metric_c_score.pth'):
+                     save_in_file=True, path_save_file='./results'):
         """
         Initialize the metric
         """
@@ -31,7 +30,6 @@ class CScoreMetric(PluginMetric[float]):
 
         self.save_in_file = save_in_file
         self.path_save_file = path_save_file
-        self.name_file = name_save_file
 
         self.top_percentaje = top_percentaje
 
@@ -123,7 +121,7 @@ class CScoreMetric(PluginMetric[float]):
             torch.save({
                 'acc_per_class': self.acc_result_classes,
                 'acc_task': self.acc_tasks,
-                }, os.path.join(self.path_save_file, self.name_file))
+                }, os.path.join(self.path_save_file, strategy.save_file_name))
         
     def update_accuracy_class(self, strategy, c, group):
         dataloder = self.class_to_dataloader[c][group]

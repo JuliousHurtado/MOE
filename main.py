@@ -192,13 +192,14 @@ def main():
         accuracy_metrics(epoch=True, experience=True, stream=True),
         loss_metrics(epoch=True, experience=True, stream=True),
         forgetting_metrics(experience=True, stream=True),
-        CScoreMetric(args.dataset, transform[0], transform[1]),
+        CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
         benchmark=benchmark,
         loggers=[InteractiveLogger()],
         strict_checks=False
     )
 
-    cl_strategy = get_strategy(args, model, optimizer, criterion, eval_plugin)
+    cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin)
+    cl_strategy.save_file_name = name_file
 
     print('Starting experiment...')
     results = []
