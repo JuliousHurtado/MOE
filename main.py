@@ -106,7 +106,7 @@ def get_model(args, num_classes):
     
     assert False, "Model {} not found".format(args.model)
 
-def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'):
+def get_strategy(args, model, optimizer, criterion, eval_plugin, val_transform, device = 'cuda'):
 
     if args.use_naive:
         return Naive(
@@ -128,7 +128,7 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
     if args.use_replay:
         return Replay(
             model, optimizer, criterion, device = device,
-            mem_size = args.replay_memmory,
+            mem_size = args.replay_memory,
             train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
             train_epochs = args.epochs,
             evaluator = eval_plugin
@@ -171,6 +171,7 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
             model.features, model.classifier, optimizer, device = device,
             memory_size = args.icarl_memory_size,
             fixed_memory = args.icarl_fixed_memory,
+            buffer_transaform = val_transform,
             train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
             train_epochs = args.epochs,
             evaluator = eval_plugin
@@ -198,7 +199,7 @@ def main():
         strict_checks=False
     )
 
-    cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin)
+    cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin, transform[1])
     cl_strategy.save_file_name = name_file
 
     print('Starting experiment...')

@@ -51,11 +51,16 @@ class CScoreMetric(PluginMetric[float]):
     def get_dataloader(self, train_dataset, val_dataset) -> None:
         total_labels = set(train_dataset.targets)
 
-        total_top = int((len(train_dataset)*self.top_percentaje)/len(total_labels))
+        total_top_train = int((len(train_dataset)*self.top_percentaje)/len(total_labels))
+        total_top_val = int((len(val_dataset)*self.top_percentaje)/len(total_labels))
 
-        if total_top < 5:
-            total_top = 5
-            print("The amount for the analysis must be >= 5, setting number to 5")
+        if total_top_train < 5:
+            total_top_train = 5
+            print("The amount for the analysis in Train must be >= 5, setting number to 5")
+
+        if total_top_val < 5:
+            total_top_val = 5
+            print("The amount for the analysis in Val must be >= 5, setting number to 5")
 
         for i in total_labels:
             train_index = torch.Tensor(range(len(train_dataset)))
@@ -64,17 +69,17 @@ class CScoreMetric(PluginMetric[float]):
             train_score_index = torch.argsort(torch.from_numpy(train_dataset.scores[train_sub_index]))
             sort_train_score_index = train_sub_index[ train_score_index ]
 
-            val_index = torch.Tensor(range(len(train_dataset)))
-            val_sub_index = val_index[ torch.Tensor(train_dataset.targets) == i ].int()
-            
-            val_score_index = torch.argsort(torch.from_numpy(train_dataset.scores[val_sub_index]))
+            val_index = torch.Tensor(range(len(val_dataset)))
+            val_sub_index = val_index[ torch.Tensor(val_dataset.targets) == i ].int()
+
+            val_score_index = torch.argsort(torch.from_numpy(val_dataset.scores[val_sub_index]))
             sort_val_score_index = val_sub_index[ val_score_index ]
 
             self.class_to_dataloader[i] = {
-                'train_lower' : DataLoader(Subset(train_dataset, sort_train_score_index[:total_top]), batch_size=128),
-                'train_upper' : DataLoader(Subset(train_dataset, sort_train_score_index[total_top:]), batch_size=128),
-                'val_lower' : DataLoader(Subset(train_dataset, sort_val_score_index[:total_top]), batch_size=128),
-                'val_upper' : DataLoader(Subset(train_dataset, sort_val_score_index[total_top:]), batch_size=128),
+                'train_lower' : DataLoader(Subset(train_dataset, sort_train_score_index[:total_top_train]), batch_size=128),
+                'train_upper' : DataLoader(Subset(train_dataset, sort_train_score_index[total_top_train:]), batch_size=128),
+                'val_lower' : DataLoader(Subset(val_dataset, sort_val_score_index[:total_top_val]), batch_size=128),
+                'val_upper' : DataLoader(Subset(val_dataset, sort_val_score_index[total_top_val:]), batch_size=128),
             }
 
     def reset(self) -> None:
@@ -113,8 +118,8 @@ class CScoreMetric(PluginMetric[float]):
                     self.update_accuracy_class(strategy, c, 'train_upper')
                     self.update_accuracy_class(strategy, c, 'val_lower')
                     self.update_accuracy_class(strategy, c, 'val_upper')
-    
-        self.acc_epochs.append(strategy.evaluator.metrics[0]._metric.result()['0'])
+        
+        self.acc_epochs.append(strategy.evaluator.metrics[0]._metric.result()[0])
 
     def after_training(self, strategy: 'PluggableStrategy'):
         if self.save_in_file:
