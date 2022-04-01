@@ -1,5 +1,4 @@
 from collections import defaultdict
-import os
 from avalanche.evaluation import PluginMetric
 
 from datasets.load_c_score import ImagenetCScore, CIFARIdx
@@ -16,7 +15,8 @@ class CScoreMetric(PluginMetric[float]):
 
     def __init__(self, name_dataset, train_transform=None, val_transform=None,
                      root='../data', top_percentaje: float=0.2,
-                     save_in_file=True, path_save_file='./results'):
+                     save_in_file=True, path_save_file='./results',
+                     batch_size = 128):
         """
         Initialize the metric
         """
@@ -27,11 +27,12 @@ class CScoreMetric(PluginMetric[float]):
         self.acc_result_classes = defaultdict(dict)
 
         self.acc_tasks = []
+        self.loss_tasks = []
 
         self.save_in_file = save_in_file
-        self.path_save_file = path_save_file
 
         self.top_percentaje = top_percentaje
+        self.bs = batch_size
 
         if name_dataset == 'cifar10':
             train_dataset = CIFARIdx(CIFAR10)(transform=train_transform, root=root, train=True, download=True)
@@ -76,10 +77,10 @@ class CScoreMetric(PluginMetric[float]):
             sort_val_score_index = val_sub_index[ val_score_index ]
 
             self.class_to_dataloader[i] = {
-                'train_lower' : DataLoader(Subset(train_dataset, sort_train_score_index[:total_top_train]), batch_size=128),
-                'train_upper' : DataLoader(Subset(train_dataset, sort_train_score_index[total_top_train:]), batch_size=128),
-                'val_lower' : DataLoader(Subset(val_dataset, sort_val_score_index[:total_top_val]), batch_size=128),
-                'val_upper' : DataLoader(Subset(val_dataset, sort_val_score_index[total_top_val:]), batch_size=128),
+                'train_lower' : DataLoader(Subset(train_dataset, sort_train_score_index[:total_top_train]), batch_size=self.bs),
+                'train_upper' : DataLoader(Subset(train_dataset, sort_train_score_index[total_top_train:]), batch_size=self.bs),
+                'val_lower' : DataLoader(Subset(val_dataset, sort_val_score_index[:total_top_val]), batch_size=self.bs),
+                'val_upper' : DataLoader(Subset(val_dataset, sort_val_score_index[total_top_val:]), batch_size=self.bs),
             }
 
     def reset(self) -> None:
@@ -95,8 +96,8 @@ class CScoreMetric(PluginMetric[float]):
         pass
 
     def after_training_exp(self, strategy: 'PluggableStrategy') -> None:
-        # print(self.acc_result_classes)
-        self.acc_tasks.append(self.acc_epochs)
+        self.acc_tasks.append(self.acc_train_epochs)
+        self.loss_tasks.append(self.loss_train_epochs)
 
     def before_training_exp(self, strategy: 'PluggableStrategy') -> None:
         self.task_to_classes[strategy.experience.current_experience] = \
@@ -108,7 +109,8 @@ class CScoreMetric(PluginMetric[float]):
             self.acc_result_classes[c]['val_lower'] = []
             self.acc_result_classes[c]['val_upper'] = []
         
-        self.acc_epochs = []
+        self.acc_train_epochs = []
+        self.loss_train_epochs = []
 
     def after_training_epoch(self, strategy: 'PluggableStrategy'):
         if self.top_percentaje > 0:
@@ -119,14 +121,16 @@ class CScoreMetric(PluginMetric[float]):
                     self.update_accuracy_class(strategy, c, 'val_lower')
                     self.update_accuracy_class(strategy, c, 'val_upper')
         
-        self.acc_epochs.append(strategy.evaluator.metrics[0]._metric.result()[0])
+        self.acc_train_epochs.append(strategy.evaluator.metrics[0]._metric.result()[0])
+        self.loss_train_epochs.append(strategy.evaluator.metrics[3]._metric.result()[0])
 
     def after_training(self, strategy: 'PluggableStrategy'):
         if self.save_in_file:
             torch.save({
                 'acc_per_class': self.acc_result_classes,
                 'acc_task': self.acc_tasks,
-                }, os.path.join(self.path_save_file, strategy.save_file_name))
+                'loss_task': self.loss_tasks,
+                }, strategy.save_file_name)
         
     def update_accuracy_class(self, strategy, c, group):
         dataloder = self.class_to_dataloader[c][group]

@@ -1,6 +1,7 @@
 from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from torchvision import transforms
+import torch
 
 from models.simpleCNN import SimpleCNN
 from metrics.c_score import CScoreMetric
@@ -10,10 +11,11 @@ from avalanche.benchmarks.classic import SplitCIFAR10, SplitMNIST, SplitCIFAR100
 from avalanche.evaluation.metrics import forgetting_metrics, \
 accuracy_metrics, loss_metrics
 
-from avalanche.logging import InteractiveLogger
+from avalanche.logging import InteractiveLogger, TextLogger
 from avalanche.training.plugins import EvaluationPlugin
 
 import argparse
+import os
 
 
 def parse_train_args():
@@ -132,7 +134,7 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, val_transform, 
             train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
             train_epochs = args.epochs,
             evaluator = eval_plugin
-        ), "reaply_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, args.replay_memmory)
+        ), "reaply_{}_{}_{}_{}.pth".format(args.model, args.dataset, args.epochs, args.replay_memory)
 
     if args.use_ewc:
         return EWC(
@@ -171,7 +173,7 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, val_transform, 
             model.features, model.classifier, optimizer, device = device,
             memory_size = args.icarl_memory_size,
             fixed_memory = args.icarl_fixed_memory,
-            buffer_transaform = val_transform,
+            buffer_transform = val_transform,
             train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
             train_epochs = args.epochs,
             evaluator = eval_plugin
@@ -195,12 +197,12 @@ def main():
         forgetting_metrics(experience=True, stream=True),
         CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
         benchmark=benchmark,
-        loggers=[InteractiveLogger()],
+        loggers=[TextLogger()],
         strict_checks=False
     )
 
     cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin, transform[1])
-    cl_strategy.save_file_name = name_file
+    cl_strategy.save_file_name = os.path.join('./results', name_file)
 
     print('Starting experiment...')
     results = []
@@ -214,7 +216,12 @@ def main():
         print('Computing accuracy on the whole test set')
         results.append(cl_strategy.eval(benchmark.test_stream))
 
-    print(results)
+    # print(results)
+
+    top_results = torch.load(cl_strategy.save_file_name)
+    top_results['benchmark_results'] = results
+
+    torch.save(top_results, cl_strategy.save_file_name)
 
 if __name__ == "__main__":
     main()
