@@ -146,7 +146,7 @@ class AGEMPluginMod(StrategyPlugin):
         self.buffer_dataloader = GroupBalancedInfiniteDataLoader(
             self.buffers,
             batch_size=self.sample_size // len(self.buffers),
-            num_workers=4,
+            num_workers=2,
             pin_memory=True,
             persistent_workers=True)
         self.buffer_dliter = iter(self.buffer_dataloader)
