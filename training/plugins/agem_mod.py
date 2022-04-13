@@ -126,9 +126,10 @@ class AGEMPluginMod(StrategyPlugin):
         ll = int(self.patterns_per_experience/num_clss)
 
         # Make AvalancheSubset per class
-        cl_datasets = {}
+        # cl_datasets = {}
         for c, c_idxs in cl_idxs.items():
-            cl_datasets[c] = AvalancheSubset(dataset, indices=c_idxs)
+            # cl_datasets[c] = AvalancheSubset(dataset, indices=c_idxs)
+            c_idxs = torch.tensor(c_idxs)
 
             if self.mode == 'lower':
                 _, sorted_idxs = torch.tensor(cl_score[c]).sort(descending=False)
@@ -138,14 +139,14 @@ class AGEMPluginMod(StrategyPlugin):
                 new_weights = torch.rand(len(cl_score[c]))
                 _, sorted_idxs = new_weights.sort(descending=True)
 
-            select_idxs = sorted_idxs[:ll]
-            class_dataset = AvalancheSubset(cl_datasets[c], indices=select_idxs)
+            select_idxs = c_idxs[ sorted_idxs[:ll] ]
+            class_dataset = AvalancheSubset(dataset, indices=select_idxs)
             self.buffers.append(class_dataset)
         
         self.buffer_dataloader = GroupBalancedInfiniteDataLoader(
             self.buffers,
             batch_size=self.sample_size // len(self.buffers),
-            num_workers=4,
+            num_workers=2,
             pin_memory=True,
             persistent_workers=True)
         self.buffer_dliter = iter(self.buffer_dataloader)
