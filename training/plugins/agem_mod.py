@@ -1,6 +1,6 @@
 import torch
-from torch.utils.data import random_split
 import numpy as np
+import random
 
 from avalanche.benchmarks.utils.data_loader import \
     GroupBalancedInfiniteDataLoader
@@ -21,7 +21,8 @@ class AGEMPluginMod(StrategyPlugin):
     """
 
     def __init__(self, patterns_per_experience: int, sample_size: int,
-                 mode: str = 'random', name_dataset: str = 'cifar10'):
+                 mode: str = 'random', mix_upper: float = 0.5,
+                 name_dataset: str = 'cifar10'):
         """
         :param patterns_per_experience: number of patterns per experience in the
             memory.
@@ -34,6 +35,7 @@ class AGEMPluginMod(StrategyPlugin):
         self.patterns_per_experience = int(patterns_per_experience)
         self.sample_size = int(sample_size)
         self.mode = mode
+        self.mix_upper = mix_upper
 
         self.buffers = []  # one AvalancheDataset for each experience.
         self.buffer_dataloader = None
@@ -136,13 +138,19 @@ class AGEMPluginMod(StrategyPlugin):
 
             if self.mode == 'lower':
                 _, sorted_idxs = torch.tensor(cl_score[c]).sort(descending=False)
-            elif self.mode == 'upper':
+            elif self.mode == 'upper' or self.mode == 'mix':
                 _, sorted_idxs = torch.tensor(cl_score[c]).sort(descending=True)
             else: # random
                 new_weights = torch.rand(len(cl_score[c]))
                 _, sorted_idxs = new_weights.sort(descending=True)
 
-            select_idxs.extend(c_idxs[ sorted_idxs[:ll] ])
+            if self.mode == 'mix':
+                num_upper = int(ll*self.mix_upper)
+                upper_list = random.sample(sorted_idxs[:ll].tolist(), num_upper)
+                lower_list = random.sample(sorted_idxs[ll:].tolist(), ll - num_upper)
+                select_idxs.extend(c_idxs[ sorted_idxs[upper_list + lower_list] ])
+            else:
+                select_idxs.extend(c_idxs[ sorted_idxs[:ll] ])
 
         class_dataset = AvalancheSubset(dataset, indices=select_idxs)
         self.buffers.append(class_dataset)

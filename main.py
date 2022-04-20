@@ -43,11 +43,13 @@ def parse_train_args():
     parser.add_argument("--use_gdumb_mod", action="store_true")
     parser.add_argument("--gdumb_memory", type=int, default=5000)
     parser.add_argument("--gdumb_buffer_mode", type=str, default="random")
+    parser.add_argument("--gdumb_mix_upper", type=float, default=0.5)
 
     parser.add_argument("--use_replay", action="store_true")
     parser.add_argument("--replay_memory", type=int, default=5000)
     parser.add_argument("--use_custom_replay_buffer", action="store_true")
     parser.add_argument("--replay_buffer_mode", type=str, default="random")
+    parser.add_argument("--replay_mix_upper", type=float, default=0.5)
 
     parser.add_argument("--use_ewc", action="store_true")
     parser.add_argument("--ewc_lambda", type=float, default=1)
@@ -63,6 +65,7 @@ def parse_train_args():
     parser.add_argument("--agem_pattern_per_exp", type=int, default=1000)
     parser.add_argument("--agem_sample_size", type=int, default=128)
     parser.add_argument("--agem_buffer_mode", type=str, default="random")
+    parser.add_argument("--agem_mix_upper", type=float, default=0.5)
 
     parser.add_argument("--use_icarl", action="store_true")
     parser.add_argument("--icarl_memory_size", type=int, default=5000)
@@ -123,7 +126,8 @@ def get_storage_policy(args):
     if args.use_custom_replay_buffer:
         return CScoreBuffer(max_size = args.replay_memory,
                     name_dataset = args.dataset,
-                    mode = args.replay_buffer_mode)
+                    mode = args.replay_buffer_mode,
+                    mix_upper = args.replay_mix_upper)
     
     return None
 
@@ -147,18 +151,29 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
 
     if args.use_gdumb_mod:
         plugins.append(GDumbPluginMod(mem_size = args.gdumb_memory, 
-            name_dataset = args.dataset, mode = args.gdumb_buffer_mode))
-        name_file = "gdumb_mod_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
-            args.n_experience, args.dataset, args.epochs, args.gdumb_memory, \
-            args.gdumb_buffer_mode, args.seed)
+            name_dataset = args.dataset, mode = args.gdumb_buffer_mode,
+            mix_upper = args.gdumb_mix_upper))
+        if args.gdumb_buffer_mode == 'mix':
+            name_file = "gdumb_mod_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
+                args.n_experience, args.dataset, args.epochs, args.gdumb_memory, \
+                args.gdumb_buffer_mode, args.gdumb_mix_upper, args.seed)
+        else:
+            name_file = "gdumb_mod_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
+                args.n_experience, args.dataset, args.epochs, args.gdumb_memory, \
+                args.gdumb_buffer_mode, args.seed)
 
     if args.use_replay:
         storage_policy = get_storage_policy(args)
         plugins.append(ReplayPlugin(mem_size = args.replay_memory, \
                                 storage_policy = storage_policy))
-        name_file = "replay_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-            args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
-            args.seed)
+        if args.replay_buffer_mode == 'mix':
+            name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.replay_mix_upper, args.seed)
+        else:
+            name_file = "replay_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.seed)
 
     if args.use_ewc:
         plugins.append(EWCPlugin(ewc_lambda = args.ewc_lambda, mode = args.ewc_mode,
@@ -183,12 +198,17 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
     if args.use_agem_mod:
         plugins.append(AGEMPluginMod(patterns_per_experience = args.agem_pattern_per_exp, 
                 sample_size = args.agem_sample_size, mode = args.agem_buffer_mode,
-                name_dataset = args.dataset))
-        name_file = "agem_mod_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, 
-                    args.n_experience, 
-                    args.dataset, args.epochs, 
-                    args.agem_pattern_per_exp, args.agem_sample_size, 
-                    args.agem_buffer_mode, args.seed)
+                mix_upper = args.agem_mix_upper, name_dataset = args.dataset))
+        if args.agem_buffer_mode == 'mix':
+            name_file = "agem_mod_{}_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, 
+                        args.n_experience, args.dataset, args.epochs, 
+                        args.agem_pattern_per_exp, args.agem_sample_size, 
+                        args.agem_buffer_mode, args.agem_mix_upper, args.seed)
+        else:
+            name_file = "agem_mod_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, 
+                        args.n_experience, args.dataset, args.epochs, 
+                        args.agem_pattern_per_exp, args.agem_sample_size, 
+                        args.agem_buffer_mode, args.seed)
 
     if args.use_icarl:
         return ICaRL(

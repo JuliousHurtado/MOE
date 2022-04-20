@@ -22,7 +22,7 @@ class GDumbPluginMod(StrategyPlugin):
     """
 
     def __init__(self, mem_size: int = 200, name_dataset: str = 'cifar10',
-                 mode: str = 'random', mix_upper: float = 0.5, mix_lower: float = 0.5):
+                 mode: str = 'random', mix_upper: float = 0.5):
         super().__init__()
         self.mem_size = mem_size
 
@@ -34,7 +34,6 @@ class GDumbPluginMod(StrategyPlugin):
             name_dataset=name_dataset,
             mode=mode,
             mix_upper=mix_upper,
-            mix_lower=mix_lower
         )
         self.init_model = None
 
