@@ -8,6 +8,8 @@ from avalanche.benchmarks.utils import AvalancheSubset
 from avalanche.training.plugins.strategy_plugin import StrategyPlugin
 from avalanche.models import avalanche_forward
 
+
+
 class AGEMPluginMod(StrategyPlugin):
     """ Average Gradient Episodic Memory Plugin.
     
@@ -127,6 +129,7 @@ class AGEMPluginMod(StrategyPlugin):
 
         # Make AvalancheSubset per class
         # cl_datasets = {}
+        select_idxs = []
         for c, c_idxs in cl_idxs.items():
             # cl_datasets[c] = AvalancheSubset(dataset, indices=c_idxs)
             c_idxs = torch.tensor(c_idxs)
@@ -139,14 +142,16 @@ class AGEMPluginMod(StrategyPlugin):
                 new_weights = torch.rand(len(cl_score[c]))
                 _, sorted_idxs = new_weights.sort(descending=True)
 
-            select_idxs = c_idxs[ sorted_idxs[:ll] ]
-            class_dataset = AvalancheSubset(dataset, indices=select_idxs)
-            self.buffers.append(class_dataset)
+            select_idxs.extend(c_idxs[ sorted_idxs[:ll] ])
+
+        class_dataset = AvalancheSubset(dataset, indices=select_idxs)
+        self.buffers.append(class_dataset)
         
         self.buffer_dataloader = GroupBalancedInfiniteDataLoader(
             self.buffers,
             batch_size=self.sample_size // len(self.buffers),
             num_workers=2,
-            pin_memory=True,
-            persistent_workers=True)
+            #pin_memory=True,
+            #persistent_workers=True)
+            )
         self.buffer_dliter = iter(self.buffer_dataloader)
