@@ -18,6 +18,7 @@ from avalanche.training.plugins import EvaluationPlugin
 from training.storage_policy.c_score_policy import CScoreBuffer
 from training.plugins.agem_mod import AGEMPluginMod
 from training.plugins.gdumb_mod import GDumbPluginMod
+from training.plugins.replay_mod import ReplayPluginMod
 
 import argparse
 import os
@@ -164,8 +165,13 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
 
     if args.use_replay:
         storage_policy = get_storage_policy(args)
-        plugins.append(ReplayPlugin(mem_size = args.replay_memory, \
-                                storage_policy = storage_policy))
+        #plugins.append(ReplayPlugin(mem_size = args.replay_memory, \
+        #                        storage_policy = storage_policy))
+        plugins.append(ReplayPluginMod(mem_size = args.replay_memory, \
+                                batch_size = args.batch_size // 2,
+                                batch_size_mem = args.batch_size // 2,
+                                storage_policy = storage_policy,
+                                task_balanced_dataloader = True))
         if args.replay_buffer_mode == 'mix':
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
