@@ -93,6 +93,11 @@ class CScoreBuffer(BalancedExemplarsBuffer):
 
         if name_dataset == 'cifar10' or name_dataset == 'cifar100':
             self.scores = np.load(f"c_score/{name_dataset}/scores.npy")
+        elif name_dataset == 'mnist':
+            data = torch.load('c_score/mnist_with_c_score.pth')
+            self.scores = data['train_scores']
+        elif name_dataset == 'imagenet':
+            self.scores = np.load(f"c_score/{name_dataset}/scores_train.npy")
         else:
             assert False, "Dataset {} not found".format(name_dataset)
 

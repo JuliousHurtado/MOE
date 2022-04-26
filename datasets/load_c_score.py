@@ -1,5 +1,6 @@
 from torchvision.datasets import CIFAR10
 from torch.utils.data import Dataset
+import torch
 
 from typing import Any, Tuple
 from os.path import join
@@ -21,8 +22,8 @@ class ImagenetCScore(Dataset):
         # Load scores list
         split = "train" if train else "test"
         self.transform = transform
-        self.files = np.load(join(root,f"filenames_{split}.npy"), allow_pickle=True)
-        self.targets = np.load(join(root,f"labels_{split}.npy"), allow_pickle=True)
+        self.files = np.load(join(img_root,f"filenames_{split}.npy"), allow_pickle=True)
+        self.targets = np.load(join(img_root,f"labels_{split}.npy"), allow_pickle=True)
         self.root = root
         
         for i in range(len(self.files)):
@@ -69,3 +70,52 @@ def CIFARIdx(cl):
             return index, img, target, self.scores[index]
 
     return DatasetCIFARIdx
+
+
+# MNIST
+
+class MNISTIdx(Dataset):
+    def __init__(self, root: str=".", 
+                       train = True,
+                       img_root="c_score/mnist_with_c_score.pth",
+                       transform=None,
+                        **kwargs: Any):
+
+        data, self.targets, self.scores = self.load_data(img_root, train)
+        self.data = data.astype(np.float32) / 255
+
+        self.transform = transform
+
+    def load_data(self, name_file, train):
+        data = torch.load(name_file)
+
+        if train:
+            return data['train_image'], data['train_labels'], data['train_scores']
+        else:
+            assert False, "We don't have score for val or test"
+
+    def __len__(self) -> int:
+        return len(self.targets)
+
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (image, target) where target is index of the target class.
+        """
+        img, target = self.data[index], int(self.targets[index])
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        # img = Image.fromarray(img, mode="L")
+        # img = img.astype(np.float32) / 255
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        # if self.target_transform is not None:
+        #     target = self.target_transform(target)
+
+        return index, img, target, self.scores[index]

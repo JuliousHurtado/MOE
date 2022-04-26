@@ -1,7 +1,7 @@
 from collections import defaultdict
 from avalanche.evaluation import PluginMetric
 
-from datasets.load_c_score import ImagenetCScore, CIFARIdx
+from datasets.load_c_score import ImagenetCScore, CIFARIdx, MNISTIdx
 
 from torchvision.datasets import CIFAR10, CIFAR100
 from torch.utils.data import Subset, DataLoader
@@ -34,12 +34,19 @@ class CScoreMetric(PluginMetric[float]):
         self.top_percentaje = top_percentaje
         self.bs = batch_size
 
+        self.use_val_dataset = False
+
         if name_dataset == 'cifar10':
             train_dataset = CIFARIdx(CIFAR10)(transform=train_transform, root=root, train=True, download=True)
             val_dataset = CIFARIdx(CIFAR10)(transform=val_transform, root=root, train=False, download=True)
+            self.use_val_dataset = True
         elif name_dataset == 'cifar100':
             train_dataset = CIFARIdx(CIFAR100)(transform=train_transform, root=root, train=True, download=True)
             val_dataset = CIFARIdx(CIFAR100)(transform=val_transform, root=root, train=False, download=True)
+            self.use_val_dataset = True
+        elif name_dataset == 'mnist':
+            train_dataset = MNISTIdx()
+            val_dataset = None
         elif name_dataset == 'imagenet':
             train_dataset = ImagenetCScore(transform=train_transform, root=root, train=True)
             val_dataset = ImagenetCScore(transform=val_transform, root=root, train=False)
@@ -53,13 +60,14 @@ class CScoreMetric(PluginMetric[float]):
         total_labels = set(train_dataset.targets)
 
         total_top_train = int((len(train_dataset)*self.top_percentaje)/len(total_labels))
-        total_top_val = int((len(val_dataset)*self.top_percentaje)/len(total_labels))
+        if self.use_val_dataset:
+            total_top_val = int((len(val_dataset)*self.top_percentaje)/len(total_labels))
 
         if total_top_train < 5:
             total_top_train = 5
             print("The amount for the analysis in Train must be >= 5, setting number to 5")
 
-        if total_top_val < 5:
+        if self.use_val_dataset and total_top_val < 5:
             total_top_val = 5
             print("The amount for the analysis in Val must be >= 5, setting number to 5")
 
@@ -70,18 +78,20 @@ class CScoreMetric(PluginMetric[float]):
             train_score_index = torch.argsort(torch.from_numpy(train_dataset.scores[train_sub_index]))
             sort_train_score_index = train_sub_index[ train_score_index ]
 
-            val_index = torch.Tensor(range(len(val_dataset)))
-            val_sub_index = val_index[ torch.Tensor(val_dataset.targets) == i ].int()
+            if self.use_val_dataset:
+                val_index = torch.Tensor(range(len(val_dataset)))
+                val_sub_index = val_index[ torch.Tensor(val_dataset.targets) == i ].int()
 
-            val_score_index = torch.argsort(torch.from_numpy(val_dataset.scores[val_sub_index]))
-            sort_val_score_index = val_sub_index[ val_score_index ]
+                val_score_index = torch.argsort(torch.from_numpy(val_dataset.scores[val_sub_index]))
+                sort_val_score_index = val_sub_index[ val_score_index ]
 
             self.class_to_dataloader[i] = {
                 'train_lower' : DataLoader(Subset(train_dataset, sort_train_score_index[:total_top_train]), batch_size=self.bs),
                 'train_upper' : DataLoader(Subset(train_dataset, sort_train_score_index[total_top_train:]), batch_size=self.bs),
-                'val_lower' : DataLoader(Subset(val_dataset, sort_val_score_index[:total_top_val]), batch_size=self.bs),
-                'val_upper' : DataLoader(Subset(val_dataset, sort_val_score_index[total_top_val:]), batch_size=self.bs),
             }
+            if self.use_val_dataset:
+                self.class_to_dataloader[i]['val_lower'] = DataLoader(Subset(val_dataset, sort_val_score_index[:total_top_val]), batch_size=self.bs)
+                self.class_to_dataloader[i]['val_upper'] = DataLoader(Subset(val_dataset, sort_val_score_index[total_top_val:]), batch_size=self.bs)
 
     def reset(self) -> None:
         """
@@ -106,8 +116,10 @@ class CScoreMetric(PluginMetric[float]):
         for c in strategy.experience.classes_in_this_experience:
             self.acc_result_classes[c]['train_lower'] = []
             self.acc_result_classes[c]['train_upper'] = []
-            self.acc_result_classes[c]['val_lower'] = []
-            self.acc_result_classes[c]['val_upper'] = []
+
+            if self.use_val_dataset:
+                self.acc_result_classes[c]['val_lower'] = []
+                self.acc_result_classes[c]['val_upper'] = []
         
         self.acc_train_epochs = []
         self.loss_train_epochs = []
@@ -118,8 +130,10 @@ class CScoreMetric(PluginMetric[float]):
                 for c in self.task_to_classes[t]:
                     self.update_accuracy_class(strategy, c, 'train_lower')
                     self.update_accuracy_class(strategy, c, 'train_upper')
-                    self.update_accuracy_class(strategy, c, 'val_lower')
-                    self.update_accuracy_class(strategy, c, 'val_upper')
+
+                    if self.use_val_dataset:
+                        self.update_accuracy_class(strategy, c, 'val_lower')
+                        self.update_accuracy_class(strategy, c, 'val_upper')
         
         self.acc_train_epochs.append(strategy.evaluator.metrics[0]._metric.result()[0])
         self.loss_train_epochs.append(strategy.evaluator.metrics[3]._metric.result()[0])

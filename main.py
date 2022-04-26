@@ -1,14 +1,16 @@
 from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from torchvision import transforms
+from torchvision.models import resnet18
 import torch
 
 from models.simpleCNN import SimpleCNN
+from models.mnist_model import SimpleNN
 from metrics.c_score import CScoreMetric
 
 from avalanche.training.strategies import BaseStrategy, ICaRL
 from avalanche.training.plugins import GDumbPlugin, ReplayPlugin, EWCPlugin, LwFPlugin, AGEMPlugin
-from avalanche.benchmarks.classic import SplitCIFAR10, SplitMNIST, SplitCIFAR100
+from avalanche.benchmarks.classic import SplitCIFAR10, SplitCIFAR100
 from avalanche.evaluation.metrics import forgetting_metrics, \
 accuracy_metrics, loss_metrics
 
@@ -19,6 +21,9 @@ from training.storage_policy.c_score_policy import CScoreBuffer
 from training.plugins.agem_mod import AGEMPluginMod
 from training.plugins.gdumb_mod import GDumbPluginMod
 from training.plugins.replay_mod import ReplayPluginMod
+
+from datasets.get_dataset import get_mnist, _default_mnist_train_transform, _default_mnist_eval_transform, \
+        get_imagenet, _default_imgenet_train_transform, _default_imgenet_val_transform
 
 import argparse
 import os
@@ -116,8 +121,20 @@ def get_dataset(args):
                     train_transform=train_transform, eval_transform=val_transform )
         
         return benchmark, 100, [train_transform, val_transform]
+    
+    if args.dataset == 'mnist':
+        benchmark = get_mnist(args.n_experience)
+        return benchmark, 10, [_default_mnist_train_transform, _default_mnist_eval_transform]
+    
+    if args.dataset == 'imagenet':
+        benchmark = get_imagenet(args.n_experience)
+        return benchmark, 1000, [_default_imgenet_train_transform, _default_imgenet_val_transform]
 
 def get_model(args, num_classes):
+    if args.dataset == 'mnist':
+        return SimpleNN(num_classes=num_classes)
+    if args.dataset == 'imagenet':
+        return resnet18()
     if args.model == 'simplecnn':
         return SimpleCNN([32,64,128], args.n_simplecnn, num_classes=num_classes)
     
