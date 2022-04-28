@@ -56,6 +56,7 @@ def parse_train_args():
     parser.add_argument("--use_custom_replay_buffer", action="store_true")
     parser.add_argument("--replay_buffer_mode", type=str, default="random")
     parser.add_argument("--replay_mix_upper", type=float, default=0.5)
+    parser.add_argument("--replay_min_bucket", type=float, default=0.9)
 
     parser.add_argument("--use_ewc", action="store_true")
     parser.add_argument("--ewc_lambda", type=float, default=1)
@@ -145,7 +146,8 @@ def get_storage_policy(args):
         return CScoreBuffer(max_size = args.replay_memory,
                     name_dataset = args.dataset,
                     mode = args.replay_buffer_mode,
-                    mix_upper = args.replay_mix_upper)
+                    mix_upper = args.replay_mix_upper,
+                    min_bucket = args.replay_min_bucket)
     
     return None
 
@@ -193,6 +195,10 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
                 args.replay_mix_upper, args.seed)
+        elif args.replay_buffer_mode == 'buckets':
+            name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.replay_min_bucket, args.seed)
         else:
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \

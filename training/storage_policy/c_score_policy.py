@@ -13,7 +13,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
     """ Buffer updated with reservoir sampling. """
 
     def __init__(self, max_size: int, mode: str = 'random', 
-                       mix_upper: float = 0.5):
+                       mix_upper: float = 0.5, min_bucket: float = 0.9):
         """
         :param max_size:
         """
@@ -28,6 +28,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         self._buffer_weights = torch.zeros(0)
         self.mode = mode
         self.mix_upper = mix_upper
+        self.min_bucket = min_bucket
 
     def update(self, strategy: 'BaseStrategy', **kwargs):
         """ Update buffer. """
@@ -49,7 +50,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
 
         if self.mode == 'lower':
             sorted_weights, sorted_idxs = cat_weights.sort(descending=False)
-        elif self.mode == 'upper':
+        elif self.mode == 'upper' or self.mode == 'buckets':
             sorted_weights, sorted_idxs = cat_weights.sort(descending=True)
         else: # random
             sorted_weights, sorted_idxs = cat_weights.sort(descending=True)
@@ -59,6 +60,11 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
             upper_list = random.sample(sorted_idxs[:self.max_size].tolist(), num_upper)
             lower_list = random.sample(sorted_idxs[self.max_size:].tolist(), self.max_size - num_upper)
             self.buffer_idxs = upper_list + lower_list
+        elif self.mode == 'buckets':
+            if self.max_size > ( sorted_weights > self.min_bucket ).sum():
+                self.buffer_idxs = sorted_idxs[:self.max_size]
+            else:
+                self.buffer_idxs = random.sample( sorted_idxs[ sorted_weights > self.min_bucket ].tolist(), self.max_size)
         else:
             self.buffer_idxs = sorted_idxs[:self.max_size]
 
@@ -78,7 +84,8 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
 class CScoreBuffer(BalancedExemplarsBuffer):
     def __init__(self, max_size: int, adaptive_size: bool = True,
                  total_num_classes: int = None, name_dataset: str = 'cifar10',
-                 mode: str = 'random', mix_upper: float = 0.5):
+                 mode: str = 'random', mix_upper: float = 0.5,
+                 min_bucket: float = 0.9):
 
         if not adaptive_size:
             assert total_num_classes > 0, \
@@ -90,6 +97,7 @@ class CScoreBuffer(BalancedExemplarsBuffer):
         self.seen_classes = set()
         self.mode = mode
         self.mix_upper = mix_upper
+        self.min_bucket = min_bucket
 
         if name_dataset == 'cifar10' or name_dataset == 'cifar100':
             self.scores = np.load(f"c_score/{name_dataset}/scores.npy")
@@ -136,7 +144,8 @@ class CScoreBuffer(BalancedExemplarsBuffer):
                 old_buffer_c.update_from_dataset(new_data_c, cl_score[class_id])
                 old_buffer_c.resize(strategy, ll)
             else:
-                new_buffer = ReservoirSamplingBuffer(ll, self.mode, self.mix_upper)
+                new_buffer = ReservoirSamplingBuffer(ll, self.mode, self.mix_upper,
+                                        min_bucket = self.min_bucket)
                 new_buffer.update_from_dataset(new_data_c, cl_score[class_id])
                 self.buffer_groups[class_id] = new_buffer
 
