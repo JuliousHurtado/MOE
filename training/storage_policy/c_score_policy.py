@@ -65,6 +65,26 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
                 self.buffer_idxs = sorted_idxs[:self.max_size]
             else:
                 self.buffer_idxs = random.sample( sorted_idxs[ sorted_weights > self.min_bucket ].tolist(), self.max_size)
+        elif self.mode == 'diversity':
+            self.buffer_idxs = []
+            b_past = 0
+            size_bucket = self.max_size // 10
+            residual = 0
+            for b in np.linspace(0.1, 1 , 10):
+                index_bucket = ( sorted_weights >= b_past ) * ( sorted_weights <= b)
+                if index_bucket.sum() < size_bucket + residual:
+                    self.buffer_idxs += random.sample( sorted_idxs[ index_bucket ].tolist(), index_bucket.sum())
+                    residual += size_bucket - index_bucket.sum()
+                else:
+                    self.buffer_idxs += random.sample( sorted_idxs[ index_bucket ].tolist(), size_bucket + residual)
+                    residual = 0
+                b_past = b
+            
+            if len(self.buffer_idxs) < self.max_size:
+                self.buffer_idxs += random.sample( sorted_idxs.tolist(), self.max_size - len(self.buffer_idxs))
+
+            random.shuffle(self.buffer_idxs)
+            print(len(self.buffer_idxs))
         else:
             self.buffer_idxs = sorted_idxs[:self.max_size]
 
