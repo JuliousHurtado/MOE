@@ -21,6 +21,7 @@ from training.storage_policy.c_score_policy import CScoreBuffer
 from training.plugins.agem_mod import AGEMPluginMod
 from training.plugins.gdumb_mod import GDumbPluginMod
 from training.plugins.replay_mod import ReplayPluginMod
+from training.plugins.mir import MIRPlugin
 
 from datasets.get_dataset import get_mnist, _default_mnist_train_transform, _default_mnist_eval_transform, \
         get_imagenet, _default_imgenet_train_transform, _default_imgenet_val_transform
@@ -36,6 +37,8 @@ def parse_train_args():
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--c_score_top_percentaje", type=float, default=0.2)
+    parser.add_argument("--lr", type=float, default=0.001)
+    parser.add_argument("--momentum", type=float, default=0.9)
 
     parser.add_argument("--model", type=str, default='simplecnn')
     parser.add_argument("--n_simplecnn", type=int, default=1)
@@ -77,6 +80,10 @@ def parse_train_args():
     parser.add_argument("--use_icarl", action="store_true")
     parser.add_argument("--icarl_memory_size", type=int, default=5000)
     parser.add_argument("--icarl_fixed_memory", action="store_false")
+
+    parser.add_argument("--use_mir", action="store_true")
+    parser.add_argument("--mir_batch_buffer", type=int, default=50)
+    parser.add_argument("--use_mir_replay", action="store_true")
 
     args = parser.parse_args()
 
@@ -252,6 +259,17 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
                     args.dataset, args.epochs, 
                     args.icarl_memory_size, args.icarl_fixed_memory, args.seed)
 
+    if args.use_mir:
+        storage_policy = get_storage_policy(args)
+        plugins.append(MIRPlugin(mem_size = args.replay_memory,
+                                mir_replay=args.use_mir_replay,
+                                storage_policy = storage_policy))
+        name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.use_mir_replay, args.seed)
+
+        args.batch_size = int(args.batch_size/2)
+
     cl_strategy = strategy(
             model, optimizer, criterion, device = device,
             plugins = plugins,
@@ -269,7 +287,8 @@ def main():
     benchmark, num_classes, transform = get_dataset(args)
     model = get_model(args, num_classes)
 
-    optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9)
+    # optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9) 
+    optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum) 
     criterion = CrossEntropyLoss()
 
     eval_plugin = EvaluationPlugin(

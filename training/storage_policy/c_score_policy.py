@@ -84,7 +84,6 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
                 self.buffer_idxs += random.sample( sorted_idxs.tolist(), self.max_size - len(self.buffer_idxs))
 
             random.shuffle(self.buffer_idxs)
-            print(len(self.buffer_idxs))
         else:
             self.buffer_idxs = sorted_idxs[:self.max_size]
 
