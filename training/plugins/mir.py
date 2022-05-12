@@ -25,7 +25,7 @@ class MIRPlugin(StrategyPlugin):
 
         self.mem_size = mem_size
         self.mir_replay = mir_replay
-        self.batch_size = 100 #batch_size
+        self.batch_size = 50 #batch_size
         self.base_lr = innit_lr
         self.buffer_batch_size = 10 # 50 # batch_size // 2
 

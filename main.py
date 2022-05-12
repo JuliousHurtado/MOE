@@ -264,11 +264,16 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
         plugins.append(MIRPlugin(mem_size = args.replay_memory,
                                 mir_replay=args.use_mir_replay,
                                 storage_policy = storage_policy))
-        name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
-                args.use_mir_replay, args.seed)
+        if args.replay_buffer_mode == 'buckets':
+            name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                    args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                    args.replay_min_bucket, args.use_mir_replay, args.seed)
+        else:
+            name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                    args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                    args.use_mir_replay, args.seed)
 
-        args.batch_size = int(args.batch_size/2)
+        args.batch_size = args.batch_size // 2
 
     cl_strategy = strategy(
             model, optimizer, criterion, device = device,
