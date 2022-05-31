@@ -50,7 +50,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
 
         if self.mode == 'lower':
             sorted_weights, sorted_idxs = cat_weights.sort(descending=False)
-        elif self.mode == 'upper' or self.mode == 'buckets':
+        elif self.mode == 'upper' or self.mode == 'caws':
             sorted_weights, sorted_idxs = cat_weights.sort(descending=True)
         else: # random
             sorted_weights, sorted_idxs = cat_weights.sort(descending=True)
@@ -60,12 +60,12 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
             upper_list = random.sample(sorted_idxs[:self.max_size].tolist(), num_upper)
             lower_list = random.sample(sorted_idxs[self.max_size:].tolist(), self.max_size - num_upper)
             self.buffer_idxs = upper_list + lower_list
-        elif self.mode == 'buckets':
+        elif self.mode == 'caws':
             if self.max_size > ( sorted_weights > self.min_bucket ).sum():
                 self.buffer_idxs = sorted_idxs[:self.max_size]
             else:
                 self.buffer_idxs = random.sample( sorted_idxs[ sorted_weights > self.min_bucket ].tolist(), self.max_size)
-        elif self.mode == 'diversity':
+        elif self.mode == 'cobs':
             self.buffer_idxs = []
             b_past = 0
             size_bucket = self.max_size // 10

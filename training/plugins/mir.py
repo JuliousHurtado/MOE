@@ -45,7 +45,7 @@ class MIRPlugin(StrategyPlugin):
 
         self.dataloader = DataLoader(self.storage_policy.buffer, 
                                 batch_size=self.batch_size, 
-                                shuffle=True, num_workers=2)
+                                shuffle=True, num_workers=4)
         self.iterator = iter(self.dataloader)
 
     def before_update(self, strategy: "BaseStrategy", **kwargs):

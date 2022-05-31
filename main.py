@@ -61,25 +61,12 @@ def parse_train_args():
     parser.add_argument("--replay_mix_upper", type=float, default=0.5)
     parser.add_argument("--replay_min_bucket", type=float, default=0.9)
 
-    parser.add_argument("--use_ewc", action="store_true")
-    parser.add_argument("--ewc_lambda", type=float, default=1)
-    parser.add_argument("--ewc_mode", type=str, default="onlinesum") # separate onlinesum onlineweightedsum
-    parser.add_argument("--ewc_decay_factor", type=float, default=0.1)
-
-    parser.add_argument("--use_lwf", action="store_true")
-    parser.add_argument("--lwf_alpha", type=float, default=0.5)
-    parser.add_argument("--lwf_temperature", type=float, default=1)
-
     parser.add_argument("--use_agem", action="store_true")
     parser.add_argument("--use_agem_mod", action="store_true")
     parser.add_argument("--agem_pattern_per_exp", type=int, default=1000)
     parser.add_argument("--agem_sample_size", type=int, default=128)
     parser.add_argument("--agem_buffer_mode", type=str, default="random")
     parser.add_argument("--agem_mix_upper", type=float, default=0.5)
-
-    parser.add_argument("--use_icarl", action="store_true")
-    parser.add_argument("--icarl_memory_size", type=int, default=5000)
-    parser.add_argument("--icarl_fixed_memory", action="store_false")
 
     parser.add_argument("--use_mir", action="store_true")
     parser.add_argument("--mir_batch_buffer", type=int, default=50)
@@ -191,8 +178,6 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
 
     if args.use_replay:
         storage_policy = get_storage_policy(args)
-        #plugins.append(ReplayPlugin(mem_size = args.replay_memory, \
-        #                        storage_policy = storage_policy))
         plugins.append(ReplayPluginMod(mem_size = args.replay_memory, \
                                 batch_size = args.batch_size // 2,
                                 batch_size_mem = args.batch_size // 2,
@@ -202,7 +187,7 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
                 args.replay_mix_upper, args.seed)
-        elif args.replay_buffer_mode == 'buckets':
+        elif args.replay_buffer_mode == 'caws':
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
                 args.replay_min_bucket, args.seed)
@@ -210,19 +195,6 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                 args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
                 args.seed)
-
-    if args.use_ewc:
-        plugins.append(EWCPlugin(ewc_lambda = args.ewc_lambda, mode = args.ewc_mode,
-                decay_factor = args.ewc_decay_factor))
-        name_file = "ewc_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, 
-                    args.dataset, args.epochs, 
-                    args.ewc_lambda, args.ewc_mode , args.ewc_decay_factor, args.seed)
-
-    if args.use_lwf:
-        plugins.append(LwFPlugin(alpha = args.lwf_alpha, temperature = args.lwf_temperature))
-        name_file = "lwf_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience,
-                    args.dataset, args.epochs, 
-                    args.lwf_alpha, args.lwf_temperature, args.seed)
 
     if args.use_agem:
         plugins.append(AGEMPlugin(patterns_per_experience = args.agem_pattern_per_exp, 
@@ -246,25 +218,12 @@ def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'
                         args.agem_pattern_per_exp, args.agem_sample_size, 
                         args.agem_buffer_mode, args.seed)
 
-    if args.use_icarl:
-        return ICaRL(
-            model.features, model.classifier, optimizer, device = device,
-            memory_size = args.icarl_memory_size,
-            fixed_memory = args.icarl_fixed_memory,
-            buffer_transform = None,
-            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
-            train_epochs = args.epochs,
-            evaluator = eval_plugin
-        ), "icarl_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, 
-                    args.dataset, args.epochs, 
-                    args.icarl_memory_size, args.icarl_fixed_memory, args.seed)
-
     if args.use_mir:
         storage_policy = get_storage_policy(args)
         plugins.append(MIRPlugin(mem_size = args.replay_memory,
                                 mir_replay=args.use_mir_replay,
                                 storage_policy = storage_policy))
-        if args.replay_buffer_mode == 'buckets':
+        if args.replay_buffer_mode == 'caws':
             name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
                     args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
                     args.replay_min_bucket, args.use_mir_replay, args.seed)
@@ -292,7 +251,6 @@ def main():
     benchmark, num_classes, transform = get_dataset(args)
     model = get_model(args, num_classes)
 
-    # optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9) 
     optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum) 
     criterion = CrossEntropyLoss()
 
@@ -300,7 +258,7 @@ def main():
         accuracy_metrics(epoch=True, experience=True, stream=True),
         loss_metrics(epoch=True, experience=True, stream=True),
         forgetting_metrics(experience=True, stream=True),
-        CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
+        # CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
         benchmark=benchmark,
         loggers=[TextLogger()],
         strict_checks=False
@@ -321,9 +279,8 @@ def main():
         print('Computing accuracy on the whole test set')
         results.append(cl_strategy.eval(benchmark.test_stream))
 
-    # print(results)
-
-    top_results = torch.load(cl_strategy.save_file_name)
+    # top_results = torch.load(cl_strategy.save_file_name)
+    top_results = {}
     top_results['benchmark_results'] = results
     top_results['args'] = args
 
