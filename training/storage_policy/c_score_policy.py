@@ -5,7 +5,7 @@ import random
 from avalanche.benchmarks.utils import AvalancheDataset, AvalancheSubset,\
      AvalancheConcatDataset
 from avalanche.training.storage_policy import BalancedExemplarsBuffer, ExemplarsBuffer
-from avalanche.training.strategies import BaseStrategy
+from avalanche.training.templates.supervised import SupervisedTemplate
 
 from datasets.load_c_score import ImagenetCScore, CIFARIdx
 
@@ -30,7 +30,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         self.mix_upper = mix_upper
         self.min_bucket = min_bucket
 
-    def update(self, strategy: 'BaseStrategy', **kwargs):
+    def update(self, strategy: 'SupervisedTemplate', **kwargs):
         """ Update buffer. """
         self.update_from_dataset(strategy.experience.dataset)
 
@@ -128,7 +128,7 @@ class CScoreBuffer(BalancedExemplarsBuffer):
         else:
             assert False, "Dataset {} not found".format(name_dataset)
 
-    def update(self, strategy: "BaseStrategy", **kwargs):
+    def update(self, strategy: "SupervisedTemplate", **kwargs):
         new_data = strategy.experience.dataset
 
         # Get sample idxs per class
