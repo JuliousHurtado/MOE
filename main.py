@@ -1,27 +1,26 @@
 from torch.optim import SGD
 from torch.nn import CrossEntropyLoss
 from torchvision import transforms
-from torchvision.models import resnet18
 import torch
 
 from models.simpleCNN import SimpleCNN
 from models.mnist_model import SimpleNN
-from metrics.c_score import CScoreMetric
+from models.resnet import resnet18
 
-from avalanche.training.strategies import BaseStrategy, ICaRL
-from avalanche.training.plugins import GDumbPlugin, ReplayPlugin, EWCPlugin, LwFPlugin, AGEMPlugin
+from avalanche.training import Naive
 from avalanche.benchmarks.classic import SplitCIFAR10, SplitCIFAR100
 from avalanche.evaluation.metrics import forgetting_metrics, \
 accuracy_metrics, loss_metrics
 
-from avalanche.logging import InteractiveLogger, TextLogger
 from avalanche.training.plugins import EvaluationPlugin
+from avalanche.logging import InteractiveLogger
+
+from avalanche.training.storage_policy import ExperienceBalancedBuffer, ClassBalancedBuffer, \
+    ReservoirSamplingBuffer
 
 from training.storage_policy.c_score_policy import CScoreBuffer
-from training.plugins.agem_mod import AGEMPluginMod
-from training.plugins.gdumb_mod import GDumbPluginMod
+from training.storage_policy.mof_policy import MeanOfFeaturesBuffer
 from training.plugins.replay_mod import ReplayPluginMod
-from training.plugins.mir import MIRPlugin
 
 from datasets.get_dataset import get_mnist, _default_mnist_train_transform, _default_mnist_eval_transform, \
         get_imagenet, _default_imgenet_train_transform, _default_imgenet_val_transform
@@ -48,29 +47,12 @@ def parse_train_args():
 
     parser.add_argument("--use_naive", action="store_true")
 
-    parser.add_argument("--use_gdumb", action="store_true")
-    parser.add_argument("--use_gdumb_mod", action="store_true")
-    parser.add_argument("--gdumb_memory", type=int, default=5000)
-    parser.add_argument("--gdumb_buffer_mode", type=str, default="random")
-    parser.add_argument("--gdumb_mix_upper", type=float, default=0.5)
-
     parser.add_argument("--use_replay", action="store_true")
-    parser.add_argument("--replay_memory", type=int, default=5000)
-    parser.add_argument("--use_custom_replay_buffer", action="store_true")
-    parser.add_argument("--replay_buffer_mode", type=str, default="random")
-    parser.add_argument("--replay_mix_upper", type=float, default=0.5)
-    parser.add_argument("--replay_min_bucket", type=float, default=0.9)
-
-    parser.add_argument("--use_agem", action="store_true")
-    parser.add_argument("--use_agem_mod", action="store_true")
-    parser.add_argument("--agem_pattern_per_exp", type=int, default=1000)
-    parser.add_argument("--agem_sample_size", type=int, default=128)
-    parser.add_argument("--agem_buffer_mode", type=str, default="random")
-    parser.add_argument("--agem_mix_upper", type=float, default=0.5)
-
-    parser.add_argument("--use_mir", action="store_true")
-    parser.add_argument("--mir_batch_buffer", type=int, default=50)
-    parser.add_argument("--use_mir_replay", action="store_true")
+    parser.add_argument("--memory_size", type=int, default=5000)
+    parser.add_argument("--buffer_mode", type=str, default='')
+    parser.add_argument("--cscore_mode", type=str, default="random")
+    parser.add_argument("--cscore_mix_upper", type=float, default=0.5)
+    parser.add_argument("--cscore_min_bucket", type=float, default=0.9)
 
     args = parser.parse_args()
 
@@ -128,7 +110,7 @@ def get_dataset(args):
 def get_model(args, num_classes):
     if args.dataset == 'mnist':
         return SimpleNN(num_classes=num_classes)
-    if args.dataset == 'imagenet':
+    if args.model == 'resnet':
         return resnet18()
     if args.model == 'simplecnn':
         return SimpleCNN([32,64,128], args.n_simplecnn, num_classes=num_classes)
@@ -136,103 +118,68 @@ def get_model(args, num_classes):
     assert False, "Model {} not found".format(args.model)
 
 def get_storage_policy(args):
-    if args.use_custom_replay_buffer:
-        return CScoreBuffer(max_size = args.replay_memory,
-                    name_dataset = args.dataset,
-                    mode = args.replay_buffer_mode,
-                    mix_upper = args.replay_mix_upper,
-                    min_bucket = args.replay_min_bucket)
+    if args.buffer_mode == 'cls_balance': # ring_buffer
+        return ClassBalancedBuffer(
+                max_size = args.memory_size,
+                adaptive_size = True
+            )
+
+    if args.buffer_mode == 'task_balance':
+        return ExperienceBalancedBuffer(
+                max_size = args.memory_size,
+                adaptive_size = True
+            )
+
+    if args.buffer_mode == 'reservoir': # random
+        return ReservoirSamplingBuffer(
+                max_size = args.memory_size
+            )
+
+    if args.buffer_mode == 'mean_features':
+        return MeanOfFeaturesBuffer(
+                max_size = args.memory_size,
+                adaptive_size = True
+        )
     
-    return None
+    if args.buffer_mode == 'c_score':
+        return CScoreBuffer(max_size = args.memory_size,
+                    name_dataset = args.dataset,
+                    mode = args.cscore_mode,
+                    mix_upper = args.cscore_mix_upper,
+                    min_bucket = args.cscore_min_bucket
+            )
+        
+    assert False, f"Reaply buffer {args.buffer_mode} unknow"
 
 def get_strategy(args, model, optimizer, criterion, eval_plugin, device = 'cuda'):
     plugins = []
-    strategy = BaseStrategy
+    strategy = Naive
 
     if args.use_naive:
-        return strategy(
-            model, optimizer, criterion, device = device,
-            train_mb_size = args.batch_size, eval_mb_size = args.batch_size,
-            train_epochs = args.epochs,
-            evaluator = eval_plugin
-        ), "naive_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, args.dataset, args.epochs, args.seed)
-
-    if args.use_gdumb:
-        plugins.append(GDumbPlugin(mem_size = args.gdumb_memory))
-        name_file = "gdumb_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
-            args.n_experience, args.dataset, args.epochs, \
-            args.gdumb_memory, args.seed)
-
-    if args.use_gdumb_mod:
-        plugins.append(GDumbPluginMod(mem_size = args.gdumb_memory, 
-            name_dataset = args.dataset, mode = args.gdumb_buffer_mode,
-            mix_upper = args.gdumb_mix_upper))
-        if args.gdumb_buffer_mode == 'mix':
-            name_file = "gdumb_mod_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
-                args.n_experience, args.dataset, args.epochs, args.gdumb_memory, \
-                args.gdumb_buffer_mode, args.gdumb_mix_upper, args.seed)
-        else:
-            name_file = "gdumb_mod_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, \
-                args.n_experience, args.dataset, args.epochs, args.gdumb_memory, \
-                args.gdumb_buffer_mode, args.seed)
+        name_file = "naive_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, args.dataset, args.epochs, args.seed)
 
     if args.use_replay:
         storage_policy = get_storage_policy(args)
-        plugins.append(ReplayPluginMod(mem_size = args.replay_memory, \
+        plugins.append(ReplayPluginMod(mem_size = args.memory_size, \
                                 batch_size = args.batch_size // 2,
                                 batch_size_mem = args.batch_size // 2,
                                 storage_policy = storage_policy,
                                 task_balanced_dataloader = True))
-        if args.replay_buffer_mode == 'mix':
+
+        if args.cscore_mode == 'mix':
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.dataset, args.epochs, args.memory_size, args.cscore_mode, \
                 args.replay_mix_upper, args.seed)
-        elif args.replay_buffer_mode == 'caws':
+
+        elif args.cscore_mode == 'caws':
             name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+                args.dataset, args.epochs, args.memory_size, args.cscore_mode, \
                 args.replay_min_bucket, args.seed)
+
         else:
-            name_file = "replay_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
+            name_file = "replay_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
+                args.dataset, args.epochs, args.memory_size, args.buffer_mode ,args.cscore_mode, \
                 args.seed)
-
-    if args.use_agem:
-        plugins.append(AGEMPlugin(patterns_per_experience = args.agem_pattern_per_exp, 
-                sample_size = args.agem_sample_size))
-        name_file = "agem_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience,
-                    args.dataset, args.epochs, 
-                    args.agem_pattern_per_exp, args.agem_sample_size, args.seed)
-    
-    if args.use_agem_mod:
-        plugins.append(AGEMPluginMod(patterns_per_experience = args.agem_pattern_per_exp, 
-                sample_size = args.agem_sample_size, mode = args.agem_buffer_mode,
-                mix_upper = args.agem_mix_upper, name_dataset = args.dataset))
-        if args.agem_buffer_mode == 'mix':
-            name_file = "agem_mod_{}_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, 
-                        args.n_experience, args.dataset, args.epochs, 
-                        args.agem_pattern_per_exp, args.agem_sample_size, 
-                        args.agem_buffer_mode, args.agem_mix_upper, args.seed)
-        else:
-            name_file = "agem_mod_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, 
-                        args.n_experience, args.dataset, args.epochs, 
-                        args.agem_pattern_per_exp, args.agem_sample_size, 
-                        args.agem_buffer_mode, args.seed)
-
-    if args.use_mir:
-        storage_policy = get_storage_policy(args)
-        plugins.append(MIRPlugin(mem_size = args.replay_memory,
-                                mir_replay=args.use_mir_replay,
-                                storage_policy = storage_policy))
-        if args.replay_buffer_mode == 'caws':
-            name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                    args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
-                    args.replay_min_bucket, args.use_mir_replay, args.seed)
-        else:
-            name_file = "mir_{}_{}_{}_{}_{}_{}_{}_{}.pth".format(args.model, args.n_experience, \
-                    args.dataset, args.epochs, args.replay_memory, args.replay_buffer_mode, \
-                    args.use_mir_replay, args.seed)
-
-        args.batch_size = args.batch_size // 2
 
     cl_strategy = strategy(
             model, optimizer, criterion, device = device,
@@ -248,11 +195,13 @@ def main():
     args = parse_train_args()
     print(args)
 
-    benchmark, num_classes, transform = get_dataset(args)
+    benchmark, num_classes, _ = get_dataset(args)
     model = get_model(args, num_classes)
 
     optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum) 
     criterion = CrossEntropyLoss()
+
+    loggers = InteractiveLogger()
 
     eval_plugin = EvaluationPlugin(
         accuracy_metrics(epoch=True, experience=True, stream=True),
@@ -260,8 +209,8 @@ def main():
         forgetting_metrics(experience=True, stream=True),
         # CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
         benchmark=benchmark,
-        loggers=[TextLogger()],
-        strict_checks=False
+        strict_checks=False,
+        loggers = loggers
     )
 
     cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin)

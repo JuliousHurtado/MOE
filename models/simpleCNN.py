@@ -36,6 +36,9 @@ class SimpleCNN(nn.Module):
         # x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
+    
+    def feature_extractor(self, x):
+        return self.features(x)
 
 if __name__ == '__main__':
     N = 2

@@ -1,10 +1,7 @@
 from typing import Optional, TYPE_CHECKING
 
-from avalanche.benchmarks.utils import AvalancheConcatDataset
-# from avalanche.benchmarks.utils.data_loader import \
-#     ReplayDataLoader
 from training.data_loader.dataloader import ReplayDataLoader
-from avalanche.training.plugins.strategy_plugin import StrategyPlugin
+from avalanche.training.plugins.strategy_plugin import SupervisedPlugin
 from avalanche.training.storage_policy import ExemplarsBuffer, \
     ExperienceBalancedBuffer
 
@@ -12,7 +9,7 @@ if TYPE_CHECKING:
     from avalanche.training.strategies import BaseStrategy
 
 
-class ReplayPluginMod(StrategyPlugin):
+class ReplayPluginMod(SupervisedPlugin):
     """
     Experience replay plugin.
 
@@ -69,6 +66,8 @@ class ReplayPluginMod(StrategyPlugin):
             # first experience. We don't use the buffer, no need to change
             # the dataloader.
             return
+
+        print(len(self.storage_policy.buffer))
 
         batch_size = self.batch_size
         if batch_size is None:
