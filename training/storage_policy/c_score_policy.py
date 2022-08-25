@@ -17,14 +17,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         """
         :param max_size:
         """
-        # The algorithm follows
-        # https://en.wikipedia.org/wiki/Reservoir_sampling
-        # We sample a random uniform value in [0, 1] for each sample and
-        # choose the `size` samples with higher values.
-        # This is equivalent to a random selection of `size_samples`
-        # from the entire stream.
         super().__init__(max_size)
-        # INVARIANT: _buffer_weights is always sorted.
         self._buffer_weights = torch.zeros(0)
         self.mode = mode
         self.mix_upper = mix_upper

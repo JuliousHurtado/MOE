@@ -67,8 +67,6 @@ class ReplayPluginMod(SupervisedPlugin):
             # the dataloader.
             return
 
-        print(len(self.storage_policy.buffer))
-
         batch_size = self.batch_size
         if batch_size is None:
             batch_size = strategy.train_mb_size

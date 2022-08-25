@@ -111,7 +111,7 @@ def get_model(args, num_classes):
     if args.dataset == 'mnist':
         return SimpleNN(num_classes=num_classes)
     if args.model == 'resnet':
-        return resnet18()
+        return resnet18(num_classes)
     if args.model == 'simplecnn':
         return SimpleCNN([32,64,128], args.n_simplecnn, num_classes=num_classes)
     

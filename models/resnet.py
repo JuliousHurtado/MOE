@@ -117,7 +117,7 @@ class ResNet(nn.Module):
         out = self.classifier(out)
         return out
 
-    def forward_feat(self, x: torch.Tensor) -> torch.Tensor:
+    def feature_extractor(self, x: torch.Tensor) -> torch.Tensor:
         out = relu(self.bn1(self.conv1(x)))
         out = self.layer1(out)  # 64, 32, 32
         out = self.layer2(out)  # 128, 16, 16
