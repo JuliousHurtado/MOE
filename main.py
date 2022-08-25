@@ -201,7 +201,7 @@ def main():
     optimizer = SGD(model.parameters(), lr=args.lr, momentum=args.momentum) 
     criterion = CrossEntropyLoss()
 
-    loggers = InteractiveLogger()
+    # loggers = InteractiveLogger()
 
     eval_plugin = EvaluationPlugin(
         accuracy_metrics(epoch=True, experience=True, stream=True),
@@ -210,7 +210,7 @@ def main():
         # CScoreMetric(args.dataset, transform[0], transform[1], top_percentaje=args.c_score_top_percentaje),
         benchmark=benchmark,
         strict_checks=False,
-        loggers = loggers
+        # loggers = loggers
     )
 
     cl_strategy, name_file = get_strategy(args, model, optimizer, criterion, eval_plugin)
