@@ -1,65 +1,65 @@
-DATASET='cifar10'
-EPOCHS=15
-N_EXPERIENCE=5
+############
+# Argument #
+############
+DATASET='cifar100'
+MODEL='simplecnn' #'simplecnn'
+N_EXP=5
 
 
-##########
-# Sec4.1 #
-##########
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_naive --epochs $EPOCHS
+python main.py --seed 44 --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs 1 --use_moe --weigth_loss --use_moe_filter --memory_size 500 --buffer_mode random --num_proxy 2 --num_neighbours 5
 
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_gdumb_mod --gdumb_memory 2000 --epochs $EPOCHS --gdumb_buffer_mode random
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_gdumb_mod --gdumb_memory 2000 --epochs $EPOCHS --gdumb_buffer_mode upper # high-c
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_gdumb_mod --gdumb_memory 2000 --epochs $EPOCHS --gdumb_buffer_mode lower # low-c
-
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_replay --replay_memory 2000 --epochs $EPOCHS --use_custom_replay_buffer --replay_buffer_mode random
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_replay --replay_memory 2000 --epochs $EPOCHS --use_custom_replay_buffer --replay_buffer_mode upper
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_replay --replay_memory 2000 --epochs $EPOCHS --use_custom_replay_buffer --replay_buffer_mode lower
-
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_agem_mod --agem_pattern_per_exp 400 --epochs $EPOCHS --agem_buffer_mode random
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_agem_mod --agem_pattern_per_exp 400 --epochs $EPOCHS --agem_buffer_mode upper
-python main.py --dataset $DATASET --n_experience $N_EXPERIENCE --seed 42 --use_agem_mod --agem_pattern_per_exp 400 --epochs $EPOCHS --agem_buffer_mode lower
-
-
-
-##########
-# Sec4.2 #
-##########
-########
-# CAWS #
-########
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.9
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.8
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.7
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.6
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.5
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.4
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.3
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.2
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.1
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode caws --replay_memory 2000 --replay_min_bucket 0.0
-
-########
-# COBS #
-########
-python main.py --n_experience $N_EXPERIENCE --seed 42 --use_replay --epochs $EPOCHS --dataset $DATASET --use_custom_replay_buffer --replay_buffer_mode cobs --replay_memory 2000 
+for e in 1 2 3 4 5 10
+do
+    for m in 500 1000
+    do
+        for n in 5 50 100
+        do
+            for s in 44 45 46
+            do
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --memory_size $m --buffer_mode random --num_proxy 2 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --memory_size $m --buffer_mode random --num_proxy 3 --num_neighbours $n
+            done
+        done
+    done
+done
 
 
 
-##########
-# Sec4.3 #
-##########
-########
-# MIR  #
-########
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode random --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode upper --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode lower --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode caws --lr 0.1 --momentum 0 --batch_size 20 --replay_min_bucket 0.5
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode cobs --lr 0.1 --momentum 0 --batch_size 20
+for e in 1 2 3 4 5 10
+do
+    for m in 500 1000
+    do
+        for n in 5 50 100
+        do
+            for s in 44 45 46
+            do
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --memory_size $m --buffer_mode top --num_proxy 2 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --memory_size $m --buffer_mode top --num_proxy 3 --num_neighbours $n
+            done
+        done
+    done
+done
 
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --use_mir_replay --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode random --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --use_mir_replay --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode upper --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --use_mir_replay --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode lower --lr 0.1 --momentum 0 --batch_size 20
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --use_mir_replay --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode caws --lr 0.1 --momentum 0 --batch_size 20 --replay_min_bucket 0.5
-python main.py --dataset $DATASET --n_experience 5 --seed 42 --use_mir --use_mir_replay --replay_memory 500 --epochs 1 --use_custom_replay_buffer --replay_buffer_mode cobs --lr 0.1 --momentum 0 --batch_size 20
+
+
+for m in 500 1000
+do
+    for e in 1 2 3 4 5 10
+    do
+        for n in 5 50 100
+        do
+            for s in 44 45 46
+            do
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.9 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.8 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.7 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.6 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.5 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.4 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.3 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.2 --num_neighbours $n
+                python main.py --seed $s --model $MODEL --dataset $DATASET --n_experience $N_EXP --epochs $e --use_moe --weigth_loss --memory_size $m --buffer_mode c_score --cscore_mode caws --num_proxy 2 --cscore_min_bucket 0.1 --num_neighbours $n
+            done
+        done
+    done
+done
