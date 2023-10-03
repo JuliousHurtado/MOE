@@ -5,7 +5,7 @@ class SimpleCNN(nn.Module):
     """
     Convolutional Neural Network
     """
-    def __init__(self, num_channels, N, num_classes=10, add_pooling=False):
+    def __init__(self, num_channels, N, num_classes=10, add_pooling=False, dataset='cifar10'):
         super(SimpleCNN, self).__init__()
 
         if add_pooling:
@@ -29,7 +29,10 @@ class SimpleCNN(nn.Module):
         layer.add_module('flatten', nn.Flatten())
         self.features = layer
 
-        self.classifier = nn.Sequential(nn.Linear(1152*N, num_classes))
+        if dataset == 'tiny_imagenet':
+            self.classifier = nn.Sequential(nn.Linear(6272*N, num_classes))
+        else:
+            self.classifier = nn.Sequential(nn.Linear(1152*N, num_classes))
 
     def forward(self, x):
         x = self.features(x)
@@ -42,7 +45,7 @@ class SimpleCNN(nn.Module):
 
 if __name__ == '__main__':
     N = 2
-    x = torch.rand(10,3,32,32)
-    model = SimpleCNN([32,64,128],4,add_pooling=False)
+    x = torch.rand(10,3,64,64)
+    model = SimpleCNN([32,64,128],4,add_pooling=False, dataset='tiny_imagenet')
     print(model)
     model(x)

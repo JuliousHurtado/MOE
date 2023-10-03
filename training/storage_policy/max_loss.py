@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import itertools
-from math import ceil
+import torch.nn as nn
 
 from avalanche.training.templates.supervised import SupervisedTemplate
 from avalanche.benchmarks.utils import (
@@ -16,7 +16,7 @@ from avalanche.training.storage_policy import BalancedExemplarsBuffer, Exemplars
 
 class ReservoirSamplingBuffer(ExemplarsBuffer):
     """Buffer updated with reservoir sampling."""
-    def __init__(self, max_size: int):
+    def __init__(self, max_size: int, descending: bool):
         """
         :param max_size:
         """
@@ -29,6 +29,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         super().__init__(max_size)
         # INVARIANT: _buffer_weights is always sorted.
         self._buffer_weights = torch.zeros(0)
+        self.descending = descending
 
 
     def update(self, strategy: "SupervisedTemplate", **kwargs):
@@ -42,9 +43,14 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         :return:
         """
 
+        if new_weights is None:
+            new_weights = torch.rand(len(new_data))
+        elif type(new_weights) == list:
+            new_weights = torch.tensor(new_weights)
+
         cat_weights = torch.cat([new_weights, self._buffer_weights])
         cat_data = AvalancheConcatDataset([new_data, self.buffer])
-        sorted_weights, sorted_idxs = cat_weights.sort(descending=False)
+        sorted_weights, sorted_idxs = cat_weights.sort(descending=self.descending)
 
         buffer_idxs = sorted_idxs[: self.max_size]
         self.buffer = AvalancheSubset(cat_data, buffer_idxs)
@@ -60,18 +66,19 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
 
 
 
-class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
+class MaxLossBuffer(BalancedExemplarsBuffer):
     """ Buffer updated with reservoir sampling. """
 
-    def __init__(self, max_size: int, adaptive_size: bool = True,):
+    def __init__(self, max_size: int, adaptive_size: bool = True, descending: bool = True):
         super().__init__(max_size, adaptive_size)
 
         self.x_memory = []
         self.y_memory = []
         self.order = []
-        self.adaptive_size = True
 
         self.seen_classes = set()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
+        self.descending = descending
 
     def update(self, strategy: "SupervisedTemplate", **kwargs):
         new_data = strategy.experience.dataset
@@ -96,14 +103,14 @@ class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
         for class_id, c_idxs in cl_idxs.items():
             ll = class_to_len[class_id]
             cd = AvalancheSubset(new_data, indices=c_idxs)
-            score = self.get_score(strategy, cd, ll)
+            score = self.get_score(strategy, cd)
 
             if class_id in self.buffer_groups:
                 old_buffer_c = self.buffer_groups[class_id]
                 old_buffer_c.update_from_dataset(cd, score)
                 old_buffer_c.resize(strategy, ll)
             else:
-                new_buffer = ReservoirSamplingBuffer(ll)
+                new_buffer = ReservoirSamplingBuffer(ll, self.descending)
                 new_buffer.update_from_dataset(cd, score)
                 self.buffer_groups[class_id] = new_buffer
 
@@ -113,42 +120,18 @@ class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
                                                 class_to_len[class_id])
 
 
-    def get_score(self, strategy: "SupervisedTemplate", dataset: AvalancheDataset, ll: int):
-        try:
-            class_patterns, _, _ = next(
-                    iter(DataLoader(dataset.eval(), batch_size=len(dataset)))
-                )
-        except:
-            class_patterns = next(
-                    iter(DataLoader(dataset.eval(), batch_size=len(dataset)))
-                )
-            class_patterns = class_patterns[0]
-        class_patterns = class_patterns.to(strategy.device)
-
+    def get_score(self, strategy: "SupervisedTemplate", dataset: AvalancheDataset):
+        dataloader = DataLoader(dataset, batch_size=128, shuffle=False)
+        
+        scores = []
         with torch.no_grad():
-            mapped_prototypes = strategy.model.feature_extractor(
-                    class_patterns
-                ).detach()
-        D = mapped_prototypes.T
-        D = D / torch.norm(D, dim=0)
+            for i,batch in enumerate(dataloader):
+                x = batch[0].to(strategy.device)
+                y = batch[1].to(strategy.device)
 
-        mu = torch.mean(D, dim=1)
-        order = torch.zeros(class_patterns.shape[0])
-        w_t = mu
+                outs = strategy.model(x)
+                loss = self.loss(outs, y)
 
-        i, added, selected = 0, 0, []
-        while not added == ll and i < 1000:
-            tmp_t = torch.mm(w_t.unsqueeze(0), D)
-            ind_max = torch.argmax(tmp_t)
+                scores.extend( [ l.item() for l in loss ] )
 
-            if ind_max not in selected:
-                order[ind_max] = 1 + added
-                added += 1
-                selected.append(ind_max.item())
-
-            w_t = w_t + mu - D[:, ind_max]
-            i += 1
-
-        order[ order == 0 ] = order.max() + 1
-
-        return order
+        return scores

@@ -1,8 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
+import random
 
 import itertools
-from math import ceil
+import torch.nn as nn
 
 from avalanche.training.templates.supervised import SupervisedTemplate
 from avalanche.benchmarks.utils import (
@@ -41,10 +42,15 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
         :param new_data:
         :return:
         """
+        
+        if new_weights is None:
+            new_weights = torch.rand(len(new_data))
+        elif type(new_weights) == list:
+            new_weights = torch.tensor(new_weights)
 
         cat_weights = torch.cat([new_weights, self._buffer_weights])
         cat_data = AvalancheConcatDataset([new_data, self.buffer])
-        sorted_weights, sorted_idxs = cat_weights.sort(descending=False)
+        sorted_weights, sorted_idxs = cat_weights.sort(descending=True)
 
         buffer_idxs = sorted_idxs[: self.max_size]
         self.buffer = AvalancheSubset(cat_data, buffer_idxs)
@@ -60,7 +66,7 @@ class ReservoirSamplingBuffer(ExemplarsBuffer):
 
 
 
-class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
+class AllRightBuffer(BalancedExemplarsBuffer):
     """ Buffer updated with reservoir sampling. """
 
     def __init__(self, max_size: int, adaptive_size: bool = True,):
@@ -69,9 +75,9 @@ class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
         self.x_memory = []
         self.y_memory = []
         self.order = []
-        self.adaptive_size = True
 
         self.seen_classes = set()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
 
     def update(self, strategy: "SupervisedTemplate", **kwargs):
         new_data = strategy.experience.dataset
@@ -96,7 +102,8 @@ class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
         for class_id, c_idxs in cl_idxs.items():
             ll = class_to_len[class_id]
             cd = AvalancheSubset(new_data, indices=c_idxs)
-            score = self.get_score(strategy, cd, ll)
+            score, new_index = self.get_score(strategy, cd, class_id, ll)
+            cd = AvalancheSubset(cd, indices=new_index)
 
             if class_id in self.buffer_groups:
                 old_buffer_c = self.buffer_groups[class_id]
@@ -113,42 +120,37 @@ class MeanOfFeaturesBuffer(BalancedExemplarsBuffer):
                                                 class_to_len[class_id])
 
 
-    def get_score(self, strategy: "SupervisedTemplate", dataset: AvalancheDataset, ll: int):
-        try:
-            class_patterns, _, _ = next(
-                    iter(DataLoader(dataset.eval(), batch_size=len(dataset)))
-                )
-        except:
-            class_patterns = next(
-                    iter(DataLoader(dataset.eval(), batch_size=len(dataset)))
-                )
-            class_patterns = class_patterns[0]
-        class_patterns = class_patterns.to(strategy.device)
-
+    def get_score(self, strategy: "SupervisedTemplate", dataset: AvalancheDataset, class_id, ll):
+        dataloader = DataLoader(dataset, batch_size=128, shuffle=False)
+        
+        scores = []
+        labels = []
         with torch.no_grad():
-            mapped_prototypes = strategy.model.feature_extractor(
-                    class_patterns
-                ).detach()
-        D = mapped_prototypes.T
-        D = D / torch.norm(D, dim=0)
+            for batch in dataloader:
+                x = batch[0].to(strategy.device)
+                y = batch[1].to(strategy.device)
 
-        mu = torch.mean(D, dim=1)
-        order = torch.zeros(class_patterns.shape[0])
-        w_t = mu
+                outs = strategy.model(x)
 
-        i, added, selected = 0, 0, []
-        while not added == ll and i < 1000:
-            tmp_t = torch.mm(w_t.unsqueeze(0), D)
-            ind_max = torch.argmax(tmp_t)
+                _, predicted = torch.max(outs.data, 1)
 
-            if ind_max not in selected:
-                order[ind_max] = 1 + added
-                added += 1
-                selected.append(ind_max.item())
+                loss = self.loss(outs, y)
 
-            w_t = w_t + mu - D[:, ind_max]
-            i += 1
+                scores.extend( [ l.item() for l in loss ] )
+                labels.extend(predicted)
+        
+        labels = torch.Tensor(labels)
+        scores = torch.Tensor(scores)
+        scores = (1 - scores/scores.max())
 
-        order[ order == 0 ] = order.max() + 1
+        b_mask = ( labels == class_id )
+        while b_mask.sum() <= ll:
+            p = random.randint(0, b_mask.size(0))
+            b_mask[p] = True
 
-        return order
+            if ll > b_mask.size(0) or b_mask.size(0) == b_mask.sum():
+                break 
+
+        print(b_mask.sum())
+
+        return scores[ b_mask ], b_mask
